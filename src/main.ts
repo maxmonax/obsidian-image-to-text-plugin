@@ -60,36 +60,38 @@ export default class ImageToTextPlugin extends Plugin {
 
 			new Notice(`📤 Sending ${file.name} to OpenAI...`);
 
+			// Новый формат контента для Vision
+			const payload = {
+				model: this.settings.model || "gpt-4o-mini",
+				messages: [
+					{
+						role: "user",
+						content: [
+							{ type: "text", text: "Извлеки весь текст с этого изображения. Если текста нет — опиши, что изображено." },
+							{
+								type: "image_url",
+								image_url: {
+									url: `data:image/png;base64,${base64}`
+								}
+							}
+						]
+					}
+				]
+			};
+
 			const response = await fetch("https://api.openai.com/v1/chat/completions", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					"Authorization": `Bearer ${this.settings.openaiApiKey}`
 				},
-				body: JSON.stringify({
-					model: this.settings.model,
-					messages: [
-						{
-							role: "user",
-							content: [
-								{
-									type: "text",
-									text: "Извлеки весь текст с этого изображения. Если текста нет — опиши, что изображено."
-								},
-								{
-									type: "image_url",
-									image_url: `data:image/png;base64,${base64}`
-								}
-							]
-						}
-					]
-				})
+				body: JSON.stringify(payload)
 			});
 
 			if (!response.ok) {
 				const errText = await response.text();
 				console.error("OpenAI API Error:", response.status, errText);
-				new Notice(`❌ OpenAI API error: ${response.status}`);
+				new Notice(`❌ OpenAI API error ${response.status}: ${errText.slice(0, 120)}...`);
 				return;
 			}
 
@@ -105,6 +107,7 @@ export default class ImageToTextPlugin extends Plugin {
 			new Notice(`❌ Error processing ${file.name}`);
 		}
 	}
+
 }
 
 // =============== SETTINGS TAB ==================
