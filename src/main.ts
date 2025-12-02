@@ -60,18 +60,32 @@ export default class ImageToTextPlugin extends Plugin {
 
 			new Notice(`📤 Sending ${file.name} to OpenAI...`);
 
-			// Новый формат контента для Vision
 			const payload = {
 				model: this.settings.model || "gpt-4o-mini",
 				messages: [
 					{
 						role: "user",
 						content: [
-							{ type: "text", text: "Извлеки весь текст с этого изображения. Если текста нет — опиши, что изображено." },
+							{
+								type: "text",
+								text:
+									"Извлеки весь текст с этого изображения, если это визитка, то верни данные строго в таком JSON формате:\n\n" +
+									"{\n" +
+									'  "name": "",\n' +
+									'  "company": "",\n' +
+									'  "position": "",\n' +
+									'  "phones": [],\n' +
+									'  "emails": [],\n' +
+									'  "website": "",\n' +
+									'  "address": "",\n' +
+									'  "rawText": ""\n' +
+									"}\n\n" +
+									"Заполни максимально точно по содержимому визитки."
+							},
 							{
 								type: "image_url",
 								image_url: {
-									url: `data:image/png;base64,${base64}`
+									url: `data:image/jpeg;base64,${base64}`
 								}
 							}
 						]
@@ -96,18 +110,61 @@ export default class ImageToTextPlugin extends Plugin {
 			}
 
 			const data = await response.json();
-			const text = data?.choices?.[0]?.message?.content ?? "⚠️ No text detected.";
+			const content = data?.choices?.[0]?.message?.content ?? "{}";
 
-			const notePath = file.path.replace(/\.\w+$/, ".md");
-			await this.app.vault.create(notePath, text);
+			let parsed;
+			try {
+				parsed = JSON.parse(content);
+			} catch (e) {
+				console.error("JSON parse error:", content);
+				new Notice("❌ Failed to parse contact JSON");
+				return;
+			}
 
-			new Notice(`✅ Text extracted from ${file.name}`);
+			const name = parsed.name?.trim() || "Unknown Contact";
+
+			// Сохраняем заметку рядом с файлом
+			const notePath = `${file.parent?.path ?? ""}/${name}.md`;
+
+			// Вставляем изображение как вложение Obsidian
+			const imageEmbed = `![[${file.name}]]`;
+
+			// Создаём текст заметки
+			const noteContent = `# ${name}
+
+				${imageEmbed}
+
+				**Компания:**  
+				${parsed.company || "-"}
+
+				**Должность:**  
+				${parsed.position || "-"}
+
+				**Телефоны:**  
+				${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}
+
+				**Email:**  
+				${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}
+
+				**Website:**  
+				${parsed.website || "-"}
+
+				**Адрес:**  
+				${parsed.address || "-"}
+
+				---
+
+				## Полный текст визитки
+				${parsed.rawText || ""}
+			`;
+
+			await this.app.vault.create(notePath, noteContent);
+			new Notice(`✅ Contact saved: ${name}`);
 		} catch (err) {
 			console.error("Error processing image:", err);
 			new Notice(`❌ Error processing ${file.name}`);
 		}
 	}
-
 }
 
 // =============== SETTINGS TAB ==================

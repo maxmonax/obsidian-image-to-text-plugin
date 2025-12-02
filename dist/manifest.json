@@ -1,0 +1,9 @@
+{
+  "id": "image-to-text-plugin",
+  "name": "Image to Text Plugin",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "author": "Your Name",
+  "description": "Automatically extracts text from images using ChatGPT and saves it to a note.",
+  "main": "main.js"
+}
