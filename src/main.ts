@@ -118,6 +118,7 @@ export default class ImageToTextPlugin extends Plugin {
 			} catch (e) {
 				console.error("JSON parse error:", content);
 				new Notice("❌ Failed to parse contact JSON");
+				new Notice(content);
 				return;
 			}
 

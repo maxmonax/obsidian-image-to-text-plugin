@@ -97,6 +97,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             catch (e) {
                 console.error("JSON parse error:", content);
                 new obsidian.Notice("❌ Failed to parse contact JSON");
+                new obsidian.Notice(content);
                 return;
             }
             const name = parsed.name?.trim() || "Unknown Contact";
