@@ -34,6 +34,63 @@ class ImageToTextPlugin extends obsidian.Plugin {
         await this.saveData(this.settings);
     }
     // =============== IMAGE PROCESSING ==================
+    /**
+ * Пытается извлечь JSON из произвольного текста.
+ * Поддерживает случаи:
+ * - ```json\n{...}\n```
+ * - ```\n{...}\n```
+ * - текст до/после JSON (берёт первую/последнюю фигурную скобку)
+ */
+    extractJsonFromText(text) {
+        if (!text || typeof text !== "string")
+            return null;
+        // Убираем BOM и нежелательные невидимые символы
+        text = text.replace(/^\uFEFF/, "").trim();
+        // 1) Попытка извлечь содержимое между тройными backticks ```...```
+        const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+        const fenceMatch = text.match(fenceRegex);
+        if (fenceMatch && fenceMatch[1]) {
+            return fenceMatch[1].trim();
+        }
+        // 2) Если нет fence — найти первый { и последний } и вырезать
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            return text.slice(firstBrace, lastBrace + 1).trim();
+        }
+        // 3) Возможно, ответ уже чистый JSON (без фигурных скобок?) — вернуть оригинал как fallback
+        return text.trim() || null;
+    }
+    /**
+     * Попытка безопасно распарсить JSON, с логами для отладки.
+     * Возвращает объект или throws ошибку.
+     */
+    tryParseJson(text) {
+        const candidate = this.extractJsonFromText(text);
+        if (!candidate)
+            throw new Error("No JSON found in response text");
+        // Убираем лишние символы в начале/конце (например, кавычки, точки)
+        const cleaned = candidate
+            .replace(/^\u200B/g, "") // zero-width
+            .replace(/\u00A0/g, " ") // non-breaking space
+            .trim();
+        try {
+            return JSON.parse(cleaned);
+        }
+        catch (err) {
+            // Бросаем подробную ошибку, чтобы видно было candidate и исходный текст
+            const e = new Error("JSON.parse failed: " + err.message);
+            e.candidate = cleaned;
+            e.original = text;
+            throw e;
+        }
+    }
+    /**
+     * Простая санитация имени файла (убирает запрещённые символы)
+     */
+    sanitizeFileName(name) {
+        return name.replace(/[\\/:"*?<>|]+/g, "").trim() || "contact";
+    }
     async processImage(file) {
         try {
             const arrayBuffer = await this.app.vault.readBinary(file);
@@ -45,16 +102,30 @@ class ImageToTextPlugin extends obsidian.Plugin {
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
             // Новый формат контента для Vision
             const payload = {
-                model: this.settings.model || "gpt-4o-mini",
+                model: "gpt-4o-mini",
                 messages: [
                     {
                         role: "user",
                         content: [
-                            { type: "text", text: "Извлеки весь текст с этого изображения. Если текста нет — опиши, что изображено." },
+                            {
+                                type: "text",
+                                text: "Распознай текст визитки и верни строго JSON формата:\n\n" +
+                                    "{\n" +
+                                    '  "name": "",\n' +
+                                    '  "company": "",\n' +
+                                    '  "position": "",\n' +
+                                    '  "phones": [],\n' +
+                                    '  "emails": [],\n' +
+                                    '  "website": "",\n' +
+                                    '  "address": "",\n' +
+                                    '  "rawText": ""\n' +
+                                    "}\n\n" +
+                                    "Заполни максимально точно по содержимому визитки."
+                            },
                             {
                                 type: "image_url",
                                 image_url: {
-                                    url: `data:image/png;base64,${base64}`
+                                    url: `data:image/jpeg;base64,${base64}`
                                 }
                             }
                         ]
@@ -76,10 +147,65 @@ class ImageToTextPlugin extends obsidian.Plugin {
                 return;
             }
             const data = await response.json();
-            const text = data?.choices?.[0]?.message?.content ?? "⚠️ No text detected.";
-            const notePath = file.path.replace(/\.\w+$/, ".md");
-            await this.app.vault.create(notePath, text);
-            new obsidian.Notice(`✅ Text extracted from ${file.name}`);
+            const content = data?.choices?.[0]?.message?.content ?? "{}";
+            let parsed;
+            try {
+                parsed = this.tryParseJson(content);
+            }
+            catch (parseErr) {
+                // Дополнительный лог в консоль для дебага
+                console.error("Failed to parse contact JSON:", parseErr);
+                // Если парсить не получилось — сохраняем исходный ответ в отдельную заметку для отладки
+                const debugName = `${file.parent?.path ?? ""}/__debug_${file.name}.txt`;
+                const debugContent = `=== RAW OPENAI RESPONSE ===\n\n${content}\n\n=== EXTRACT ATTEMPT ===\n\nCandidate:\n${parseErr.candidate ?? "N/A"}\n\nError:\n${parseErr.message}`;
+                try {
+                    await this.app.vault.create(debugName, debugContent);
+                    new obsidian.Notice("❗ Failed to parse JSON. Saved raw response to debug note.");
+                }
+                catch (e) {
+                    console.error("Failed to write debug note:", e);
+                    new obsidian.Notice("❗ Failed to parse JSON and couldn't save debug note. See console.");
+                }
+                return;
+            }
+            // Теперь у нас parsed — объект
+            const name = (parsed.name && String(parsed.name).trim()) || "Unknown Contact";
+            // Сохраняем заметку рядом с файлом
+            const safeName = this.sanitizeFileName(name);
+            const folder = file.parent?.path ?? "";
+            const notePath = `${folder}/${safeName}.md`;
+            // Вставляем изображение как вложение Obsidian
+            const imageEmbed = `![[${file.name}]]`;
+            // Создаём текст заметки
+            const noteContent = `# ${name}
+
+			${imageEmbed}
+
+			**Компания:**  
+			${parsed.company || "-"}
+
+			**Должность:**  
+			${parsed.position || "-"}
+
+			**Телефоны:**  
+			${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}
+
+			**Email:**  
+			${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}
+
+			**Website:**  
+			${parsed.website || "-"}
+
+			**Адрес:**  
+			${parsed.address || "-"}
+
+			---
+
+			## Полный текст визитки
+			${parsed.rawText || ""}
+		`;
+            await this.app.vault.create(notePath, noteContent);
+            new obsidian.Notice(`✅ Contact saved: ${name}`);
         }
         catch (err) {
             console.error("Error processing image:", err);
