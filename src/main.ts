@@ -55,61 +55,61 @@ export default class ImageToTextPlugin extends Plugin {
  * - ```\n{...}\n```
  * - текст до/после JSON (берёт первую/последнюю фигурную скобку)
  */
-extractJsonFromText(text: string): string | null {
-  if (!text || typeof text !== "string") return null;
+	extractJsonFromText(text: string): string | null {
+		if (!text || typeof text !== "string") return null;
 
-  // Убираем BOM и нежелательные невидимые символы
-  text = text.replace(/^\uFEFF/, "").trim();
+		// Убираем BOM и нежелательные невидимые символы
+		text = text.replace(/^\uFEFF/, "").trim();
 
-  // 1) Попытка извлечь содержимое между тройными backticks ```...```
-  const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
-  const fenceMatch = text.match(fenceRegex);
-  if (fenceMatch && fenceMatch[1]) {
-    return fenceMatch[1].trim();
-  }
+		// 1) Попытка извлечь содержимое между тройными backticks ```...```
+		const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+		const fenceMatch = text.match(fenceRegex);
+		if (fenceMatch && fenceMatch[1]) {
+			return fenceMatch[1].trim();
+		}
 
-  // 2) Если нет fence — найти первый { и последний } и вырезать
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return text.slice(firstBrace, lastBrace + 1).trim();
-  }
+		// 2) Если нет fence — найти первый { и последний } и вырезать
+		const firstBrace = text.indexOf("{");
+		const lastBrace = text.lastIndexOf("}");
+		if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+			return text.slice(firstBrace, lastBrace + 1).trim();
+		}
 
-  // 3) Возможно, ответ уже чистый JSON (без фигурных скобок?) — вернуть оригинал как fallback
-  return text.trim() || null;
-}
-
-/**
- * Попытка безопасно распарсить JSON, с логами для отладки.
- * Возвращает объект или throws ошибку.
- */
-tryParseJson(text: string): any {
-	const candidate = this.extractJsonFromText(text);
-	if (!candidate) throw new Error("No JSON found in response text");
-
-	// Убираем лишние символы в начале/конце (например, кавычки, точки)
-	const cleaned = candidate
-		.replace(/^\u200B/g, "") // zero-width
-		.replace(/\u00A0/g, " ") // non-breaking space
-		.trim();
-
-	try {
-		return JSON.parse(cleaned);
-	} catch (err) {
-		// Бросаем подробную ошибку, чтобы видно было candidate и исходный текст
-		const e: any = new Error("JSON.parse failed: " + (err as Error).message);
-		e.candidate = cleaned;
-		e.original = text;
-		throw e;
+		// 3) Возможно, ответ уже чистый JSON (без фигурных скобок?) — вернуть оригинал как fallback
+		return text.trim() || null;
 	}
+
+	/**
+	 * Попытка безопасно распарсить JSON, с логами для отладки.
+	 * Возвращает объект или throws ошибку.
+	 */
+	tryParseJson(text: string): any {
+		const candidate = this.extractJsonFromText(text);
+		if (!candidate) throw new Error("No JSON found in response text");
+
+		// Убираем лишние символы в начале/конце (например, кавычки, точки)
+		const cleaned = candidate
+			.replace(/^\u200B/g, "") // zero-width
+			.replace(/\u00A0/g, " ") // non-breaking space
+			.trim();
+
+		try {
+			return JSON.parse(cleaned);
+		} catch (err) {
+			// Бросаем подробную ошибку, чтобы видно было candidate и исходный текст
+			const e: any = new Error("JSON.parse failed: " + (err as Error).message);
+			e.candidate = cleaned;
+			e.original = text;
+			throw e;
+		}
 	}
-	
-/**
- * Простая санитация имени файла (убирает запрещённые символы)
- */
-sanitizeFileName(name: string): string {
-  return name.replace(/[\\/:"*?<>|]+/g, "").trim() || "contact";
-}
+
+	/**
+	 * Простая санитация имени файла (убирает запрещённые символы)
+	 */
+	sanitizeFileName(name: string): string {
+		return name.replace(/[\\/:"*?<>|]+/g, "").trim() || "contact";
+	}
 
 	async processImage(file: TFile) {
 		try {
@@ -178,72 +178,61 @@ sanitizeFileName(name: string): string {
 
 			let parsed;
 			try {
-      parsed = this.tryParseJson(content);
-    } catch (parseErr) {
-      // Дополнительный лог в консоль для дебага
-      console.error("Failed to parse contact JSON:", parseErr);
-      // Если парсить не получилось — сохраняем исходный ответ в отдельную заметку для отладки
-      const debugName = `${file.parent?.path ?? ""}/__debug_${file.name}.txt`;
-      const debugContent = `=== RAW OPENAI RESPONSE ===\n\n${content}\n\n=== EXTRACT ATTEMPT ===\n\nCandidate:\n${(parseErr as any).candidate ?? "N/A"}\n\nError:\n${(parseErr as Error).message}`;
-      try {
-        await this.app.vault.create(debugName, debugContent);
-        new Notice("❗ Failed to parse JSON. Saved raw response to debug note.");
-      } catch (e) {
-        console.error("Failed to write debug note:", e);
-        new Notice("❗ Failed to parse JSON and couldn't save debug note. See console.");
-      }
-      return;
-    }
+				parsed = this.tryParseJson(content);
+			} catch (parseErr) {
+				// Дополнительный лог в консоль для дебага
+				console.error("Failed to parse contact JSON:", parseErr);
+				// Если парсить не получилось — сохраняем исходный ответ в отдельную заметку для отладки
+				const debugName = `${file.parent?.path ?? ""}/__debug_${file.name}.txt`;
+				const debugContent = `=== RAW OPENAI RESPONSE ===\n\n${content}\n\n=== EXTRACT ATTEMPT ===\n\nCandidate:\n${(parseErr as any).candidate ?? "N/A"}\n\nError:\n${(parseErr as Error).message}`;
+				try {
+					await this.app.vault.create(debugName, debugContent);
+					new Notice("❗ Failed to parse JSON. Saved raw response to debug note.");
+				} catch (e) {
+					console.error("Failed to write debug note:", e);
+					new Notice("❗ Failed to parse JSON and couldn't save debug note. See console.");
+				}
+				return;
+			}
 
-    // Теперь у нас parsed — объект
-    const name = (parsed.name && String(parsed.name).trim()) || "Unknown Contact";
+			// Теперь у нас parsed — объект
+			const name = (parsed.name && String(parsed.name).trim()) || "Unknown Contact";
 
-    // Сохраняем заметку рядом с файлом
-    const safeName = this.sanitizeFileName(name);
-    const folder = file.parent?.path ?? "";
-    const notePath = `${folder}/${safeName}.md`;
+			// Сохраняем заметку рядом с файлом
+			const safeName = this.sanitizeFileName(name);
+			const folder = file.parent?.path ?? "";
+			const notePath = `${folder}/${safeName}.md`;
 
-    // Вставляем изображение как вложение Obsidian
-    const imageEmbed = `![[${file.name}]]`;
+			// Вставляем изображение как вложение Obsidian
+			const imageEmbed = `![[${file.name}]]`;
 
 			// Создаём текст заметки
-			const noteContent = `# ${name}
+			const noteContent = `
+Компания: ${parsed.company || "-"}
+Должность: ${parsed.position || "-"}
+Телефоны: ${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}
+Email: ${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}
+Website: ${parsed.website || "-"}
+Адрес: ${parsed.address || "-"}
 
-			${imageEmbed}
+---
 
-			**Компания:**  
-			${parsed.company || "-"}
-
-			**Должность:**  
-			${parsed.position || "-"}
-
-			**Телефоны:**  
-			${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}
-
-			**Email:**  
-			${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}
-
-			**Website:**  
-			${parsed.website || "-"}
-
-			**Адрес:**  
-			${parsed.address || "-"}
-
-			---
-
-			## Полный текст визитки
-			${parsed.rawText || ""}
-		`;
+Полный текст визитки:
+${parsed.rawText || ""}
+${imageEmbed}
+`;
 
 			await this.app.vault.create(notePath, noteContent);
 			new Notice(`✅ Contact saved: ${name}`);
+
 		} catch (err) {
 			console.error("Error processing image:", err);
 			new Notice(`❌ Error processing ${file.name}`);
 		}
 	}
 
-}
+
+} // class ImageToTextPlugin
 
 // =============== SETTINGS TAB ==================
 

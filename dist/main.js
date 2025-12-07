@@ -177,33 +177,20 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // Вставляем изображение как вложение Obsidian
             const imageEmbed = `![[${file.name}]]`;
             // Создаём текст заметки
-            const noteContent = `# ${name}
+            const noteContent = `
+Компания: ${parsed.company || "-"}
+Должность: ${parsed.position || "-"}
+Телефоны: ${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}
+Email: ${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}
+Website: ${parsed.website || "-"}
+Адрес: ${parsed.address || "-"}
 
-			${imageEmbed}
+---
 
-			**Компания:**  
-			${parsed.company || "-"}
-
-			**Должность:**  
-			${parsed.position || "-"}
-
-			**Телефоны:**  
-			${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}
-
-			**Email:**  
-			${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}
-
-			**Website:**  
-			${parsed.website || "-"}
-
-			**Адрес:**  
-			${parsed.address || "-"}
-
-			---
-
-			## Полный текст визитки
-			${parsed.rawText || ""}
-		`;
+Полный текст визитки:
+${parsed.rawText || ""}
+${imageEmbed}
+`;
             await this.app.vault.create(notePath, noteContent);
             new obsidian.Notice(`✅ Contact saved: ${name}`);
         }
@@ -212,7 +199,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             new obsidian.Notice(`❌ Error processing ${file.name}`);
         }
     }
-}
+} // class ImageToTextPlugin
 // =============== SETTINGS TAB ==================
 class ImageToTextSettingTab extends obsidian.PluginSettingTab {
     constructor(app, plugin) {
