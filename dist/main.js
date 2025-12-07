@@ -93,10 +93,35 @@ class ImageToTextPlugin extends obsidian.Plugin {
         console.log(`❌ No note found with embed: ${embed}`);
         return null;
     }
+    // Добавляем метод для определения MIME-типа
+    getMimeType(file) {
+        const ext = file.extension.toLowerCase();
+        switch (ext) {
+            case 'jpg':
+            case 'jpeg':
+                return 'image/jpeg';
+            case 'png':
+                return 'image/png';
+            case 'gif':
+                return 'image/gif';
+            case 'webp':
+                return 'image/webp';
+            case 'bmp':
+                return 'image/bmp';
+            default:
+                return 'image/jpeg';
+        }
+    }
     async processImage(file) {
         try {
             const arrayBuffer = await this.app.vault.readBinary(file);
             const base64 = arrayBufferToBase64(arrayBuffer);
+            // Определяем MIME-тип
+            const mimeType = this.getMimeType(file);
+            // Создаём data URL
+            const dataUrl = `data:${mimeType};base64,${base64}`;
+            // Вставляем как base64 в markdown
+            const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
                 new obsidian.Notice("⚠️ Please set your OpenAI API key in the plugin settings.");
                 return;
@@ -157,7 +182,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // const existingNote = await this.findNoteWithImage(file);
             // переименовываем картинку
             await this.app.vault.rename(file, imgName);
-            const embed = `![[${imgName}]]`;
             let notePath;
             let noteContent;
             // Формируем содержимое заметки
@@ -174,7 +198,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
                     `**Адрес:** ${parsed.address || "-"}\n\n` +
                     `---\n\n` +
                     `**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
-                    embed;
+                    imageEmbed;
             // if (existingNote) {
             // 	// Обновляем существующую заметку
             // 	await this.app.vault.modify(existingNote, noteContent);
@@ -198,11 +222,9 @@ class ImageToTextPlugin extends obsidian.Plugin {
             await this.app.vault.create(notePath, noteContent);
             new obsidian.Notice(`📄 Created new note: ${safeName}`);
             // }
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // await new Promise(resolve => setTimeout(resolve, 5000));
             // удаляем картинку
-            // await this.app.vault.delete(file);
-            // await this.app.vault.rename(file, safeName + "." + file.extension);
-            // await this.app.vault.modify(file, noteContent);
+            await this.app.vault.delete(file);
         }
         catch (err) {
             console.error("Error processing image:", err);

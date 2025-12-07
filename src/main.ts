@@ -118,10 +118,39 @@ export default class ImageToTextPlugin extends Plugin {
 		return null;
 	}
 
+	// Добавляем метод для определения MIME-типа
+	getMimeType(file: TFile): string {
+		const ext = file.extension.toLowerCase();
+		switch (ext) {
+			case 'jpg':
+			case 'jpeg':
+				return 'image/jpeg';
+			case 'png':
+				return 'image/png';
+			case 'gif':
+				return 'image/gif';
+			case 'webp':
+				return 'image/webp';
+			case 'bmp':
+				return 'image/bmp';
+			default:
+				return 'image/jpeg';
+		}
+	}
+	
 	async processImage(file: TFile) {
 		try {
 			const arrayBuffer = await this.app.vault.readBinary(file);
 			const base64 = arrayBufferToBase64(arrayBuffer);
+
+			// Определяем MIME-тип
+			const mimeType = this.getMimeType(file);
+	
+			// Создаём data URL
+			const dataUrl = `data:${mimeType};base64,${base64}`;
+	
+			// Вставляем как base64 в markdown
+			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
 				new Notice("⚠️ Please set your OpenAI API key in the plugin settings.");
@@ -194,7 +223,6 @@ export default class ImageToTextPlugin extends Plugin {
 			// переименовываем картинку
 			await this.app.vault.rename(file, imgName);
 
-			const embed = `![[${imgName}]]`;
 			let notePath: string;
 			let noteContent: string;
 
@@ -212,7 +240,7 @@ export default class ImageToTextPlugin extends Plugin {
 				`**Адрес:** ${parsed.address || "-"}\n\n` +
 				`---\n\n` +
 				`**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
-				embed;
+				imageEmbed;
 
 			// if (existingNote) {
 			// 	// Обновляем существующую заметку
@@ -240,13 +268,10 @@ export default class ImageToTextPlugin extends Plugin {
 				new Notice(`📄 Created new note: ${safeName}`);
 			// }
 
-			await new Promise(resolve => setTimeout(resolve, 5000));
+			// await new Promise(resolve => setTimeout(resolve, 5000));
 
 			// удаляем картинку
-			// await this.app.vault.delete(file);
-			// await this.app.vault.rename(file, safeName + "." + file.extension);
-			// await this.app.vault.modify(file, noteContent);
-
+			await this.app.vault.delete(file);
 
 		} catch (err) {
 			console.error("Error processing image:", err);
