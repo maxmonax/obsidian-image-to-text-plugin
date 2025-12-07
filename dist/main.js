@@ -151,49 +151,58 @@ class ImageToTextPlugin extends obsidian.Plugin {
             const parsed = this.tryParseJson(content);
             const name = parsed.name?.trim() || file.basename || "Unknown Contact";
             const safeName = this.sanitizeFileName(name);
+            const imgName = safeName + "." + file.extension;
             new obsidian.Notice(`✅ Recognized: ${name}`);
             // Ищем существующую заметку с этим изображением
-            const existingNote = await this.findNoteWithImage(file);
-            const embed = `![[${file.name}]]`;
+            // const existingNote = await this.findNoteWithImage(file);
+            // переименовываем картинку
+            await this.app.vault.rename(file, imgName);
+            const embed = `![[${imgName}]]`;
             let notePath;
             let noteContent;
             // Формируем содержимое заметки
             noteContent =
-                `# ${name}\n\n` +
-                    embed +
-                    `\n\n---\n\n` +
-                    `**Компания:** ${parsed.company || "-"}\n` +
+                // `# ${name}\n\n` +
+                // embed +
+                // `\n\n---\n\n` +
+                // `\n` +
+                `**Компания:** ${parsed.company || "-"}\n` +
                     `**Должность:** ${parsed.position || "-"}\n` +
                     `**Телефоны:**\n${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}\n` +
                     `**Email:**\n${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}\n` +
                     `**Website:** ${parsed.website || "-"}\n` +
                     `**Адрес:** ${parsed.address || "-"}\n\n` +
                     `---\n\n` +
-                    `**Полный текст визитки:**\n${parsed.rawText || ""}`;
-            if (existingNote) {
-                // Обновляем существующую заметку
-                await this.app.vault.modify(existingNote, noteContent);
-                new obsidian.Notice(`📝 Updated existing note: ${existingNote.basename}`);
-            }
-            else {
-                // Создаём новую заметку рядом с изображением
-                const folder = file.parent?.path ?? "";
-                notePath = `${folder}/${safeName}.md`;
-                // Проверяем, существует ли уже файл с таким именем
-                const existingFile = this.app.vault.getAbstractFileByPath(notePath);
-                if (existingFile instanceof obsidian.TFile) {
-                    // Если файл существует, добавляем к имени номер
-                    let counter = 1;
-                    let newPath = notePath;
-                    while (this.app.vault.getAbstractFileByPath(newPath)) {
-                        newPath = `${folder}/${safeName} (${counter}).md`;
-                        counter++;
-                    }
-                    notePath = newPath;
+                    `**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
+                    embed;
+            // if (existingNote) {
+            // 	// Обновляем существующую заметку
+            // 	await this.app.vault.modify(existingNote, noteContent);
+            // 	new Notice(`📝 Updated existing note: ${existingNote.basename}`);
+            // } else {
+            // Создаём новую заметку рядом с изображением
+            const folder = file.parent?.path ?? "";
+            notePath = `${folder}/${safeName}.md`;
+            // Проверяем, существует ли уже файл с таким именем
+            const existingFile = this.app.vault.getAbstractFileByPath(notePath);
+            if (existingFile instanceof obsidian.TFile) {
+                // Если файл существует, добавляем к имени номер
+                let counter = 1;
+                let newPath = notePath;
+                while (this.app.vault.getAbstractFileByPath(newPath)) {
+                    newPath = `${folder}/${safeName} (${counter}).md`;
+                    counter++;
                 }
-                await this.app.vault.create(notePath, noteContent);
-                new obsidian.Notice(`📄 Created new note: ${safeName}`);
+                notePath = newPath;
             }
+            await this.app.vault.create(notePath, noteContent);
+            new obsidian.Notice(`📄 Created new note: ${safeName}`);
+            // }
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            // удаляем картинку
+            // await this.app.vault.delete(file);
+            // await this.app.vault.rename(file, safeName + "." + file.extension);
+            // await this.app.vault.modify(file, noteContent);
         }
         catch (err) {
             console.error("Error processing image:", err);

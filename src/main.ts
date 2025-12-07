@@ -184,21 +184,26 @@ export default class ImageToTextPlugin extends Plugin {
 			const parsed = this.tryParseJson(content);
 			const name = parsed.name?.trim() || file.basename || "Unknown Contact";
 			const safeName = this.sanitizeFileName(name);
+			const imgName = safeName + "." + file.extension;
 
 			new Notice(`✅ Recognized: ${name}`);
 
 			// Ищем существующую заметку с этим изображением
-			const existingNote = await this.findNoteWithImage(file);
+			// const existingNote = await this.findNoteWithImage(file);
 
-			const embed = `![[${file.name}]]`;
+			// переименовываем картинку
+			await this.app.vault.rename(file, imgName);
+
+			const embed = `![[${imgName}]]`;
 			let notePath: string;
 			let noteContent: string;
 
 			// Формируем содержимое заметки
 			noteContent = 
-				`# ${name}\n\n` +
-				embed +
-				`\n\n---\n\n` +
+				// `# ${name}\n\n` +
+				// embed +
+				// `\n\n---\n\n` +
+				// `\n` +
 				`**Компания:** ${parsed.company || "-"}\n` +
 				`**Должность:** ${parsed.position || "-"}\n` +
 				`**Телефоны:**\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
@@ -206,13 +211,14 @@ export default class ImageToTextPlugin extends Plugin {
 				`**Website:** ${parsed.website || "-"}\n` +
 				`**Адрес:** ${parsed.address || "-"}\n\n` +
 				`---\n\n` +
-				`**Полный текст визитки:**\n${parsed.rawText || ""}`;
+				`**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
+				embed;
 
-			if (existingNote) {
-				// Обновляем существующую заметку
-				await this.app.vault.modify(existingNote, noteContent);
-				new Notice(`📝 Updated existing note: ${existingNote.basename}`);
-			} else {
+			// if (existingNote) {
+			// 	// Обновляем существующую заметку
+			// 	await this.app.vault.modify(existingNote, noteContent);
+			// 	new Notice(`📝 Updated existing note: ${existingNote.basename}`);
+			// } else {
 				// Создаём новую заметку рядом с изображением
 				const folder = file.parent?.path ?? "";
 				notePath = `${folder}/${safeName}.md`;
@@ -232,7 +238,15 @@ export default class ImageToTextPlugin extends Plugin {
 				
 				await this.app.vault.create(notePath, noteContent);
 				new Notice(`📄 Created new note: ${safeName}`);
-			}
+			// }
+
+			await new Promise(resolve => setTimeout(resolve, 5000));
+
+			// удаляем картинку
+			// await this.app.vault.delete(file);
+			// await this.app.vault.rename(file, safeName + "." + file.extension);
+			// await this.app.vault.modify(file, noteContent);
+
 
 		} catch (err) {
 			console.error("Error processing image:", err);
