@@ -28,6 +28,10 @@ export default class ImageToTextPlugin extends Plugin {
 			this.app.vault.on("create", async (file: TFile) => {
 				if (file.extension.match(/(png|jpg|jpeg|webp)/i)) {
 					new Notice(`🖼 Processing ${file.name}...`);
+					
+					// Ждём немного, чтобы Obsidian успел создать заметку
+					await new Promise(resolve => setTimeout(resolve, 1000));
+					
 					await this.processImage(file);
 				}
 			})
@@ -48,55 +52,38 @@ export default class ImageToTextPlugin extends Plugin {
 
 	// =============== IMAGE PROCESSING ==================
 
-	/**
- * Пытается извлечь JSON из произвольного текста.
- * Поддерживает случаи:
- * - ```json\n{...}\n```
- * - ```\n{...}\n```
- * - текст до/после JSON (берёт первую/последнюю фигурную скобку)
- */
 	extractJsonFromText(text: string): string | null {
 		if (!text || typeof text !== "string") return null;
 
-		// Убираем BOM и нежелательные невидимые символы
 		text = text.replace(/^\uFEFF/, "").trim();
 
-		// 1) Попытка извлечь содержимое между тройными backticks ```...```
 		const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
 		const fenceMatch = text.match(fenceRegex);
 		if (fenceMatch && fenceMatch[1]) {
 			return fenceMatch[1].trim();
 		}
 
-		// 2) Если нет fence — найти первый { и последний } и вырезать
 		const firstBrace = text.indexOf("{");
 		const lastBrace = text.lastIndexOf("}");
 		if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
 			return text.slice(firstBrace, lastBrace + 1).trim();
 		}
 
-		// 3) Возможно, ответ уже чистый JSON (без фигурных скобок?) — вернуть оригинал как fallback
 		return text.trim() || null;
 	}
 
-	/**
-	 * Попытка безопасно распарсить JSON, с логами для отладки.
-	 * Возвращает объект или throws ошибку.
-	 */
 	tryParseJson(text: string): any {
 		const candidate = this.extractJsonFromText(text);
 		if (!candidate) throw new Error("No JSON found in response text");
 
-		// Убираем лишние символы в начале/конце (например, кавычки, точки)
 		const cleaned = candidate
-			.replace(/^\u200B/g, "") // zero-width
-			.replace(/\u00A0/g, " ") // non-breaking space
+			.replace(/^\u200B/g, "")
+			.replace(/\u00A0/g, " ")
 			.trim();
 
 		try {
 			return JSON.parse(cleaned);
 		} catch (err) {
-			// Бросаем подробную ошибку, чтобы видно было candidate и исходный текст
 			const e: any = new Error("JSON.parse failed: " + (err as Error).message);
 			e.candidate = cleaned;
 			e.original = text;
@@ -104,11 +91,31 @@ export default class ImageToTextPlugin extends Plugin {
 		}
 	}
 
-	/**
-	 * Простая санитация имени файла (убирает запрещённые символы)
-	 */
 	sanitizeFileName(name: string): string {
 		return name.replace(/[\\/:"*?<>|]+/g, "").trim() || "contact";
+	}
+
+	async findNoteWithImage(imageFile: TFile): Promise<TFile | null> {
+		const embed = `![[${imageFile.name}]]`;
+		const markdownFiles = this.app.vault.getMarkdownFiles();
+		
+		console.log(`markdownFiles:`, markdownFiles);
+		
+		for (const mdFile of markdownFiles) {
+			console.log(`check md:`, mdFile.name);
+			try {
+				const content = await this.app.vault.read(mdFile);
+				if (content.includes(embed)) {
+					console.log(`✅ Found note with image: ${mdFile.name}`);
+					return mdFile;
+				}
+			} catch (error) {
+				console.error(`Error reading ${mdFile.name}:`, error);
+			}
+		}
+		
+		console.log(`❌ No note found with embed: ${embed}`);
+		return null;
 	}
 
 	async processImage(file: TFile) {
@@ -123,7 +130,7 @@ export default class ImageToTextPlugin extends Plugin {
 
 			new Notice(`📤 Sending ${file.name} to OpenAI...`);
 
-			// Новый формат контента для Vision
+			// Отправляем изображение в OpenAI
 			const payload = {
 				model: "gpt-4o-mini",
 				messages: [
@@ -158,106 +165,80 @@ export default class ImageToTextPlugin extends Plugin {
 			};
 
 			const response = await fetch("https://api.openai.com/v1/chat/completions", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"Authorization": `Bearer ${this.settings.openaiApiKey}`
-			},
-			body: JSON.stringify(payload)
-		});
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${this.settings.openaiApiKey}`
+				},
+				body: JSON.stringify(payload)
+			});
 
-		const data = await response.json();
-		const content = data?.choices?.[0]?.message?.content ?? "{}";
-
-		const parsed = this.tryParseJson(content);
-		const name = parsed.name?.trim() || "Unknown Contact";
-		const safeName = this.sanitizeFileName(name);
-
-		new Notice(`name: ${name}`);
-		new Notice(`safeName: ${safeName}`);
-		
-		//-----------------------------------------------------------
-		// 🔍 1. Ищем заметку, которую создал Obsidian при импорте фото
-		//-----------------------------------------------------------
-
-		// Ждём, пока Obsidian создаст файл заметки
-		await new Promise(res => setTimeout(res, 200));
-
-		const embed = `![[${file.name}]]`;
-		let pictureNote: TFile | null = null;
-
-		// Ищем заметку, где содержится embed
-			this.app.vault.getMarkdownFiles().forEach(md => {
-			console.log(`checking note:`, md);
-			
-			if (!pictureNote) {
-				this.app.vault.read(md).then(content => {
-					console.log(`content check: ${content}`);
-					if (content.includes(embed)) {
-						pictureNote = md;
-					}
-				});
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
 			}
-		});
 
-		// Ждём завершения поиска
-		await new Promise(res => setTimeout(res, 200));
+			const data = await response.json();
+			const content = data?.choices?.[0]?.message?.content ?? "{}";
 
-		//-----------------------------------------------------------
-		// 📌 2. Если нашли созданную Obsidian заметку — используем её
-		//-----------------------------------------------------------
+			const parsed = this.tryParseJson(content);
+			const name = parsed.name?.trim() || file.basename || "Unknown Contact";
+			const safeName = this.sanitizeFileName(name);
 
-		if (pictureNote) {
-			const oldContent = await this.app.vault.read(pictureNote);
+			new Notice(`✅ Recognized: ${name}`);
 
-			const newContent =
+			// Ищем существующую заметку с этим изображением
+			const existingNote = await this.findNoteWithImage(file);
+
+			const embed = `![[${file.name}]]`;
+			let notePath: string;
+			let noteContent: string;
+
+			// Формируем содержимое заметки
+			noteContent = 
 				`# ${name}\n\n` +
 				embed +
 				`\n\n---\n\n` +
-				`Компания: ${parsed.company || "-"}\n` +
-				`Должность: ${parsed.position || "-"}\n` +
-				`Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
-				`Email:\n${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}\n` +
-				`Website: ${parsed.website || "-"}\n` +
-				`Адрес: ${parsed.address || "-"}\n\n` +
-				`---\n\nПолный текст визитки:\n${parsed.rawText || ""}`;
+				`**Компания:** ${parsed.company || "-"}\n` +
+				`**Должность:** ${parsed.position || "-"}\n` +
+				`**Телефоны:**\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
+				`**Email:**\n${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}\n` +
+				`**Website:** ${parsed.website || "-"}\n` +
+				`**Адрес:** ${parsed.address || "-"}\n\n` +
+				`---\n\n` +
+				`**Полный текст визитки:**\n${parsed.rawText || ""}`;
 
-			await this.app.vault.modify(pictureNote, newContent);
+			if (existingNote) {
+				// Обновляем существующую заметку
+				await this.app.vault.modify(existingNote, noteContent);
+				new Notice(`📝 Updated existing note: ${existingNote.basename}`);
+			} else {
+				// Создаём новую заметку рядом с изображением
+				const folder = file.parent?.path ?? "";
+				notePath = `${folder}/${safeName}.md`;
+				
+				// Проверяем, существует ли уже файл с таким именем
+				const existingFile = this.app.vault.getAbstractFileByPath(notePath);
+				if (existingFile instanceof TFile) {
+					// Если файл существует, добавляем к имени номер
+					let counter = 1;
+					let newPath = notePath;
+					while (this.app.vault.getAbstractFileByPath(newPath)) {
+						newPath = `${folder}/${safeName} (${counter}).md`;
+						counter++;
+					}
+					notePath = newPath;
+				}
+				
+				await this.app.vault.create(notePath, noteContent);
+				new Notice(`📄 Created new note: ${safeName}`);
+			}
 
-			new Notice(`✅ Contact updated in ${pictureNote.basename}`);
-			return;
+		} catch (err) {
+			console.error("Error processing image:", err);
+			new Notice(`❌ Error processing ${file.name}: ${err.message}`);
 		}
-
-		//-----------------------------------------------------------
-		// ❗ 3. Если заметку НЕ нашли — создаём новую
-		//-----------------------------------------------------------
-
-		const folder = file.parent?.path ?? "";
-		const notePath = `${folder}/${safeName}.md`;
-
-		const noteContent =
-			//`# ${name}\n\n` +
-			//embed +
-			//`\n\n---\n\n` +
-			`Компания: ${parsed.company || "-"}\n` +
-			`Должность: ${parsed.position || "-"}\n` +
-			`Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
-			`Email:\n${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}\n` +
-			`Website: ${parsed.website || "-"}\n` +
-			`Адрес: ${parsed.address || "-"}\n\n` +
-			`---\n\nПолный текст визитки:\n${parsed.rawText || ""}\n` +
-			embed +
-			`\n`;
-
-		await this.app.vault.create(notePath, noteContent);
-		new Notice(`📄 Created new note: ${safeName}`);
-
-	} catch (err) {
-		console.error("Error processing image:", err);
-		new Notice(`❌ Error processing ${file.name}`);
 	}
-	}
-
 
 } // class ImageToTextPlugin
 
