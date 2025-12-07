@@ -140,59 +140,73 @@ class ImageToTextPlugin extends obsidian.Plugin {
                 },
                 body: JSON.stringify(payload)
             });
-            if (!response.ok) {
-                const errText = await response.text();
-                console.error("OpenAI API Error:", response.status, errText);
-                new obsidian.Notice(`❌ OpenAI API error ${response.status}: ${errText.slice(0, 120)}...`);
-                return;
-            }
             const data = await response.json();
             const content = data?.choices?.[0]?.message?.content ?? "{}";
-            let parsed;
-            try {
-                parsed = this.tryParseJson(content);
-            }
-            catch (parseErr) {
-                // Дополнительный лог в консоль для дебага
-                console.error("Failed to parse contact JSON:", parseErr);
-                // Если парсить не получилось — сохраняем исходный ответ в отдельную заметку для отладки
-                const debugName = `${file.parent?.path ?? ""}/__debug_${file.name}.txt`;
-                const debugContent = `=== RAW OPENAI RESPONSE ===\n\n${content}\n\n=== EXTRACT ATTEMPT ===\n\nCandidate:\n${parseErr.candidate ?? "N/A"}\n\nError:\n${parseErr.message}`;
-                try {
-                    await this.app.vault.create(debugName, debugContent);
-                    new obsidian.Notice("❗ Failed to parse JSON. Saved raw response to debug note.");
+            const parsed = this.tryParseJson(content);
+            const name = parsed.name?.trim() || "Unknown Contact";
+            const safeName = this.sanitizeFileName(name);
+            new obsidian.Notice(`name: ${name}`);
+            new obsidian.Notice(`safeName: ${safeName}`);
+            //-----------------------------------------------------------
+            // 🔍 1. Ищем заметку, которую создал Obsidian при импорте фото
+            //-----------------------------------------------------------
+            // Ждём, пока Obsidian создаст файл заметки
+            await new Promise(res => setTimeout(res, 200));
+            const embed = `![[${file.name}]]`;
+            let pictureNote = null;
+            // Ищем заметку, где содержится embed
+            this.app.vault.getMarkdownFiles().forEach(md => {
+                console.log(`checking note:`, md);
+                if (!pictureNote) {
+                    this.app.vault.read(md).then(content => {
+                        console.log(`content check: ${content}`);
+                        if (content.includes(embed)) {
+                            pictureNote = md;
+                        }
+                    });
                 }
-                catch (e) {
-                    console.error("Failed to write debug note:", e);
-                    new obsidian.Notice("❗ Failed to parse JSON and couldn't save debug note. See console.");
-                }
+            });
+            // Ждём завершения поиска
+            await new Promise(res => setTimeout(res, 200));
+            //-----------------------------------------------------------
+            // 📌 2. Если нашли созданную Obsidian заметку — используем её
+            //-----------------------------------------------------------
+            if (pictureNote) {
+                const oldContent = await this.app.vault.read(pictureNote);
+                const newContent = `# ${name}\n\n` +
+                    embed +
+                    `\n\n---\n\n` +
+                    `Компания: ${parsed.company || "-"}\n` +
+                    `Должность: ${parsed.position || "-"}\n` +
+                    `Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}\n` +
+                    `Email:\n${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}\n` +
+                    `Website: ${parsed.website || "-"}\n` +
+                    `Адрес: ${parsed.address || "-"}\n\n` +
+                    `---\n\nПолный текст визитки:\n${parsed.rawText || ""}`;
+                await this.app.vault.modify(pictureNote, newContent);
+                new obsidian.Notice(`✅ Contact updated in ${pictureNote.basename}`);
                 return;
             }
-            // Теперь у нас parsed — объект
-            const name = (parsed.name && String(parsed.name).trim()) || "Unknown Contact";
-            // Сохраняем заметку рядом с файлом
-            const safeName = this.sanitizeFileName(name);
+            //-----------------------------------------------------------
+            // ❗ 3. Если заметку НЕ нашли — создаём новую
+            //-----------------------------------------------------------
             const folder = file.parent?.path ?? "";
             const notePath = `${folder}/${safeName}.md`;
-            // Вставляем изображение как вложение Obsidian
-            const imageEmbed = `![[${file.name}]]`;
-            // Создаём текст заметки
-            const noteContent = `
-Компания: ${parsed.company || "-"}
-Должность: ${parsed.position || "-"}
-Телефоны: ${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}
-Email: ${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}
-Website: ${parsed.website || "-"}
-Адрес: ${parsed.address || "-"}
-
----
-
-Полный текст визитки:
-${parsed.rawText || ""}
-${imageEmbed}
-`;
+            const noteContent = 
+            //`# ${name}\n\n` +
+            //embed +
+            //`\n\n---\n\n` +
+            `Компания: ${parsed.company || "-"}\n` +
+                `Должность: ${parsed.position || "-"}\n` +
+                `Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}\n` +
+                `Email:\n${parsed.emails?.length ? parsed.emails.map((e) => `- ${e}`).join("\n") : "-"}\n` +
+                `Website: ${parsed.website || "-"}\n` +
+                `Адрес: ${parsed.address || "-"}\n\n` +
+                `---\n\nПолный текст визитки:\n${parsed.rawText || ""}\n` +
+                embed +
+                `\n`;
             await this.app.vault.create(notePath, noteContent);
-            new obsidian.Notice(`✅ Contact saved: ${name}`);
+            new obsidian.Notice(`📄 Created new note: ${safeName}`);
         }
         catch (err) {
             console.error("Error processing image:", err);

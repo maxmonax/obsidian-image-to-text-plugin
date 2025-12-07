@@ -158,77 +158,104 @@ export default class ImageToTextPlugin extends Plugin {
 			};
 
 			const response = await fetch("https://api.openai.com/v1/chat/completions", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"Authorization": `Bearer ${this.settings.openaiApiKey}`
-				},
-				body: JSON.stringify(payload)
-			});
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"Authorization": `Bearer ${this.settings.openaiApiKey}`
+			},
+			body: JSON.stringify(payload)
+		});
 
-			if (!response.ok) {
-				const errText = await response.text();
-				console.error("OpenAI API Error:", response.status, errText);
-				new Notice(`❌ OpenAI API error ${response.status}: ${errText.slice(0, 120)}...`);
-				return;
+		const data = await response.json();
+		const content = data?.choices?.[0]?.message?.content ?? "{}";
+
+		const parsed = this.tryParseJson(content);
+		const name = parsed.name?.trim() || "Unknown Contact";
+		const safeName = this.sanitizeFileName(name);
+
+		new Notice(`name: ${name}`);
+		new Notice(`safeName: ${safeName}`);
+		
+		//-----------------------------------------------------------
+		// 🔍 1. Ищем заметку, которую создал Obsidian при импорте фото
+		//-----------------------------------------------------------
+
+		// Ждём, пока Obsidian создаст файл заметки
+		await new Promise(res => setTimeout(res, 200));
+
+		const embed = `![[${file.name}]]`;
+		let pictureNote: TFile | null = null;
+
+		// Ищем заметку, где содержится embed
+			this.app.vault.getMarkdownFiles().forEach(md => {
+			console.log(`checking note:`, md);
+			
+			if (!pictureNote) {
+				this.app.vault.read(md).then(content => {
+					console.log(`content check: ${content}`);
+					if (content.includes(embed)) {
+						pictureNote = md;
+					}
+				});
 			}
+		});
 
-			const data = await response.json();
-			const content = data?.choices?.[0]?.message?.content ?? "{}";
+		// Ждём завершения поиска
+		await new Promise(res => setTimeout(res, 200));
 
-			let parsed;
-			try {
-				parsed = this.tryParseJson(content);
-			} catch (parseErr) {
-				// Дополнительный лог в консоль для дебага
-				console.error("Failed to parse contact JSON:", parseErr);
-				// Если парсить не получилось — сохраняем исходный ответ в отдельную заметку для отладки
-				const debugName = `${file.parent?.path ?? ""}/__debug_${file.name}.txt`;
-				const debugContent = `=== RAW OPENAI RESPONSE ===\n\n${content}\n\n=== EXTRACT ATTEMPT ===\n\nCandidate:\n${(parseErr as any).candidate ?? "N/A"}\n\nError:\n${(parseErr as Error).message}`;
-				try {
-					await this.app.vault.create(debugName, debugContent);
-					new Notice("❗ Failed to parse JSON. Saved raw response to debug note.");
-				} catch (e) {
-					console.error("Failed to write debug note:", e);
-					new Notice("❗ Failed to parse JSON and couldn't save debug note. See console.");
-				}
-				return;
-			}
+		//-----------------------------------------------------------
+		// 📌 2. Если нашли созданную Obsidian заметку — используем её
+		//-----------------------------------------------------------
 
-			// Теперь у нас parsed — объект
-			const name = (parsed.name && String(parsed.name).trim()) || "Unknown Contact";
+		if (pictureNote) {
+			const oldContent = await this.app.vault.read(pictureNote);
 
-			// Сохраняем заметку рядом с файлом
-			const safeName = this.sanitizeFileName(name);
-			const folder = file.parent?.path ?? "";
-			const notePath = `${folder}/${safeName}.md`;
+			const newContent =
+				`# ${name}\n\n` +
+				embed +
+				`\n\n---\n\n` +
+				`Компания: ${parsed.company || "-"}\n` +
+				`Должность: ${parsed.position || "-"}\n` +
+				`Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
+				`Email:\n${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}\n` +
+				`Website: ${parsed.website || "-"}\n` +
+				`Адрес: ${parsed.address || "-"}\n\n` +
+				`---\n\nПолный текст визитки:\n${parsed.rawText || ""}`;
 
-			// Вставляем изображение как вложение Obsidian
-			const imageEmbed = `![[${file.name}]]`;
+			await this.app.vault.modify(pictureNote, newContent);
 
-			// Создаём текст заметки
-			const noteContent = `
-Компания: ${parsed.company || "-"}
-Должность: ${parsed.position || "-"}
-Телефоны: ${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}
-Email: ${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}
-Website: ${parsed.website || "-"}
-Адрес: ${parsed.address || "-"}
-
----
-
-Полный текст визитки:
-${parsed.rawText || ""}
-${imageEmbed}
-`;
-
-			await this.app.vault.create(notePath, noteContent);
-			new Notice(`✅ Contact saved: ${name}`);
-
-		} catch (err) {
-			console.error("Error processing image:", err);
-			new Notice(`❌ Error processing ${file.name}`);
+			new Notice(`✅ Contact updated in ${pictureNote.basename}`);
+			return;
 		}
+
+		//-----------------------------------------------------------
+		// ❗ 3. Если заметку НЕ нашли — создаём новую
+		//-----------------------------------------------------------
+
+		const folder = file.parent?.path ?? "";
+		const notePath = `${folder}/${safeName}.md`;
+
+		const noteContent =
+			//`# ${name}\n\n` +
+			//embed +
+			//`\n\n---\n\n` +
+			`Компания: ${parsed.company || "-"}\n` +
+			`Должность: ${parsed.position || "-"}\n` +
+			`Телефоны:\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
+			`Email:\n${parsed.emails?.length ? parsed.emails.map((e: string) => `- ${e}`).join("\n") : "-"}\n` +
+			`Website: ${parsed.website || "-"}\n` +
+			`Адрес: ${parsed.address || "-"}\n\n` +
+			`---\n\nПолный текст визитки:\n${parsed.rawText || ""}\n` +
+			embed +
+			`\n`;
+
+		await this.app.vault.create(notePath, noteContent);
+		new Notice(`📄 Created new note: ${safeName}`);
+
+	} catch (err) {
+		console.error("Error processing image:", err);
+		new Notice(`❌ Error processing ${file.name}`);
+	}
 	}
 
 
