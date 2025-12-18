@@ -114,10 +114,11 @@ class ImageToTextPlugin extends obsidian.Plugin {
     }
     async processImage(file) {
         try {
-            const arrayBuffer = await this.app.vault.readBinary(file);
-            const base64 = arrayBufferToBase64(arrayBuffer);
-            // Определяем MIME-тип
+            const originalBuffer = await this.app.vault.readBinary(file);
             const mimeType = this.getMimeType(file);
+            const { rotation, buffer } = await detectBestRotation(originalBuffer, mimeType, this.settings.openaiApiKey);
+            new obsidian.Notice(`🧭 Image rotation detected: ${rotation}°`);
+            const base64 = arrayBufferToBase64(buffer);
             // Создаём data URL
             const dataUrl = `data:${mimeType};base64,${base64}`;
             // Вставляем как base64 в markdown
@@ -145,7 +146,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
                                     '  "emails": [],\n' +
                                     '  "website": "",\n' +
                                     '  "address": "",\n' +
-                                    '  "rawText": ""\n' +
+                                    '  "rawText": "",\n' +
                                     "}\n\n" +
                                     "Заполни максимально точно по содержимому визитки."
                             },
@@ -186,10 +187,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
             let noteContent;
             // Формируем содержимое заметки
             noteContent =
-                // `# ${name}\n\n` +
-                // embed +
-                // `\n\n---\n\n` +
-                // `\n` +
                 `**Компания:** ${parsed.company || "-"}\n` +
                     `**Должность:** ${parsed.position || "-"}\n` +
                     `**Телефоны:**\n${parsed.phones?.length ? parsed.phones.map((p) => `- ${p}`).join("\n") : "-"}\n` +
@@ -199,11 +196,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
                     `---\n\n` +
                     `**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
                     imageEmbed;
-            // if (existingNote) {
-            // 	// Обновляем существующую заметку
-            // 	await this.app.vault.modify(existingNote, noteContent);
-            // 	new Notice(`📝 Updated existing note: ${existingNote.basename}`);
-            // } else {
             // Создаём новую заметку рядом с изображением
             const folder = file.parent?.path ?? "";
             notePath = `${folder}/${safeName}.md`;
@@ -221,8 +213,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
             }
             await this.app.vault.create(notePath, noteContent);
             new obsidian.Notice(`📄 Created new note: ${safeName}`);
-            // }
-            // await new Promise(resolve => setTimeout(resolve, 5000));
             // удаляем картинку
             await this.app.vault.delete(file);
         }
@@ -274,6 +264,86 @@ function arrayBufferToBase64(buffer) {
         binary += String.fromCharCode.apply(null, Array.from(chunk));
     }
     return btoa(binary);
+}
+// Поворот изображения на заданный угол
+async function rotateArrayBuffer(buffer, degrees, mimeType) {
+    const blob = new Blob([buffer], { type: mimeType });
+    const img = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (degrees === 90 || degrees === 270) {
+        canvas.width = img.height;
+        canvas.height = img.width;
+    }
+    else {
+        canvas.width = img.width;
+        canvas.height = img.height;
+    }
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((degrees * Math.PI) / 180);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    return new Promise((resolve) => {
+        canvas.toBlob((b) => {
+            b.arrayBuffer().then(resolve);
+        }, mimeType, 0.95);
+    });
+}
+// Оценка читаемости (мини-запрос)
+async function scoreImageReadability(base64, apiKey) {
+    const payload = {
+        model: "gpt-4o-mini",
+        max_tokens: 10,
+        messages: [
+            {
+                role: "user",
+                content: [
+                    {
+                        type: "text",
+                        text: "Оцени, насколько удобно читать текст на изображении " +
+                            "в текущей ориентации.\n" +
+                            "Ответь строго одним числом от 0 до 10."
+                    },
+                    {
+                        type: "image_url",
+                        image_url: {
+                            url: `data:image/jpeg;base64,${base64}`
+                        }
+                    }
+                ]
+            }
+        ]
+    };
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content ?? "0";
+    const score = parseInt(text, 10);
+    return Number.isFinite(score) ? score : 0;
+}
+// Поиск лучшего угла поворота
+async function detectBestRotation(buffer, mimeType, apiKey) {
+    const rotations = [0, 90, 180, 270];
+    let bestScore = -1;
+    let bestRotation = 0;
+    let bestBuffer = buffer;
+    for (const deg of rotations) {
+        const rotatedBuffer = deg === 0 ? buffer : await rotateArrayBuffer(buffer, deg, mimeType);
+        const base64 = arrayBufferToBase64(rotatedBuffer);
+        const score = await scoreImageReadability(base64, apiKey);
+        console.log(`[ROTATION CHECK] ${deg}° → score ${score}`);
+        if (score > bestScore) {
+            bestScore = score;
+            bestRotation = deg;
+            bestBuffer = rotatedBuffer;
+        }
+    }
+    return { rotation: bestRotation, buffer: bestBuffer };
 }
 
 module.exports = ImageToTextPlugin;

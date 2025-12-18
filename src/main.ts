@@ -28,10 +28,10 @@ export default class ImageToTextPlugin extends Plugin {
 			this.app.vault.on("create", async (file: TFile) => {
 				if (file.extension.match(/(png|jpg|jpeg|webp)/i)) {
 					new Notice(`🖼 Processing ${file.name}...`);
-					
+
 					// Ждём немного, чтобы Obsidian успел создать заметку
 					await new Promise(resolve => setTimeout(resolve, 1000));
-					
+
 					await this.processImage(file);
 				}
 			})
@@ -98,9 +98,9 @@ export default class ImageToTextPlugin extends Plugin {
 	async findNoteWithImage(imageFile: TFile): Promise<TFile | null> {
 		const embed = `![[${imageFile.name}]]`;
 		const markdownFiles = this.app.vault.getMarkdownFiles();
-		
+
 		console.log(`markdownFiles:`, markdownFiles);
-		
+
 		for (const mdFile of markdownFiles) {
 			console.log(`check md:`, mdFile.name);
 			try {
@@ -113,7 +113,7 @@ export default class ImageToTextPlugin extends Plugin {
 				console.error(`Error reading ${mdFile.name}:`, error);
 			}
 		}
-		
+
 		console.log(`❌ No note found with embed: ${embed}`);
 		return null;
 	}
@@ -137,18 +137,25 @@ export default class ImageToTextPlugin extends Plugin {
 				return 'image/jpeg';
 		}
 	}
-	
+
 	async processImage(file: TFile) {
 		try {
-			const arrayBuffer = await this.app.vault.readBinary(file);
-			const base64 = arrayBufferToBase64(arrayBuffer);
-
-			// Определяем MIME-тип
+			const originalBuffer = await this.app.vault.readBinary(file);
 			const mimeType = this.getMimeType(file);
-	
+
+			const { rotation, buffer } = await detectBestRotation(
+				originalBuffer,
+				mimeType,
+				this.settings.openaiApiKey
+			);
+
+			new Notice(`🧭 Image rotation detected: ${rotation}°`);
+
+			const base64 = arrayBufferToBase64(buffer);
+
 			// Создаём data URL
 			const dataUrl = `data:${mimeType};base64,${base64}`;
-	
+
 			// Вставляем как base64 в markdown
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
@@ -178,7 +185,7 @@ export default class ImageToTextPlugin extends Plugin {
 									'  "emails": [],\n' +
 									'  "website": "",\n' +
 									'  "address": "",\n' +
-									'  "rawText": ""\n' +
+									'  "rawText": "",\n' +
 									"}\n\n" +
 									"Заполни максимально точно по содержимому визитки."
 							},
@@ -227,11 +234,7 @@ export default class ImageToTextPlugin extends Plugin {
 			let noteContent: string;
 
 			// Формируем содержимое заметки
-			noteContent = 
-				// `# ${name}\n\n` +
-				// embed +
-				// `\n\n---\n\n` +
-				// `\n` +
+			noteContent =
 				`**Компания:** ${parsed.company || "-"}\n` +
 				`**Должность:** ${parsed.position || "-"}\n` +
 				`**Телефоны:**\n${parsed.phones?.length ? parsed.phones.map((p: string) => `- ${p}`).join("\n") : "-"}\n` +
@@ -242,33 +245,25 @@ export default class ImageToTextPlugin extends Plugin {
 				`**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
 				imageEmbed;
 
-			// if (existingNote) {
-			// 	// Обновляем существующую заметку
-			// 	await this.app.vault.modify(existingNote, noteContent);
-			// 	new Notice(`📝 Updated existing note: ${existingNote.basename}`);
-			// } else {
-				// Создаём новую заметку рядом с изображением
-				const folder = file.parent?.path ?? "";
-				notePath = `${folder}/${safeName}.md`;
-				
-				// Проверяем, существует ли уже файл с таким именем
-				const existingFile = this.app.vault.getAbstractFileByPath(notePath);
-				if (existingFile instanceof TFile) {
-					// Если файл существует, добавляем к имени номер
-					let counter = 1;
-					let newPath = notePath;
-					while (this.app.vault.getAbstractFileByPath(newPath)) {
-						newPath = `${folder}/${safeName} (${counter}).md`;
-						counter++;
-					}
-					notePath = newPath;
-				}
-				
-				await this.app.vault.create(notePath, noteContent);
-				new Notice(`📄 Created new note: ${safeName}`);
-			// }
+			// Создаём новую заметку рядом с изображением
+			const folder = file.parent?.path ?? "";
+			notePath = `${folder}/${safeName}.md`;
 
-			// await new Promise(resolve => setTimeout(resolve, 5000));
+			// Проверяем, существует ли уже файл с таким именем
+			const existingFile = this.app.vault.getAbstractFileByPath(notePath);
+			if (existingFile instanceof TFile) {
+				// Если файл существует, добавляем к имени номер
+				let counter = 1;
+				let newPath = notePath;
+				while (this.app.vault.getAbstractFileByPath(newPath)) {
+					newPath = `${folder}/${safeName} (${counter}).md`;
+					counter++;
+				}
+				notePath = newPath;
+			}
+
+			await this.app.vault.create(notePath, noteContent);
+			new Notice(`📄 Created new note: ${safeName}`);
 
 			// удаляем картинку
 			await this.app.vault.delete(file);
@@ -336,4 +331,112 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 		binary += String.fromCharCode.apply(null, Array.from(chunk));
 	}
 	return btoa(binary);
+}
+
+// Поворот изображения на заданный угол
+async function rotateArrayBuffer(
+	buffer: ArrayBuffer,
+	degrees: number,
+	mimeType: string
+): Promise<ArrayBuffer> {
+	const blob = new Blob([buffer], { type: mimeType });
+	const img = await createImageBitmap(blob);
+
+	const canvas = document.createElement("canvas");
+	const ctx = canvas.getContext("2d")!;
+
+	if (degrees === 90 || degrees === 270) {
+		canvas.width = img.height;
+		canvas.height = img.width;
+	} else {
+		canvas.width = img.width;
+		canvas.height = img.height;
+	}
+
+	ctx.translate(canvas.width / 2, canvas.height / 2);
+	ctx.rotate((degrees * Math.PI) / 180);
+	ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+	return new Promise((resolve) => {
+		canvas.toBlob((b) => {
+			b!.arrayBuffer().then(resolve);
+		}, mimeType, 0.95);
+	});
+}
+
+// Оценка читаемости (мини-запрос)
+async function scoreImageReadability(
+	base64: string,
+	apiKey: string
+): Promise<number> {
+	const payload = {
+		model: "gpt-4o-mini",
+		max_tokens: 10,
+		messages: [
+			{
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text:
+							"Оцени, насколько удобно читать текст на изображении " +
+							"в текущей ориентации.\n" +
+							"Ответь строго одним числом от 0 до 10."
+					},
+					{
+						type: "image_url",
+						image_url: {
+							url: `data:image/jpeg;base64,${base64}`
+						}
+					}
+				]
+			}
+		]
+	};
+
+	const response = await fetch("https://api.openai.com/v1/chat/completions", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"Authorization": `Bearer ${apiKey}`
+		},
+		body: JSON.stringify(payload)
+	});
+
+	const data = await response.json();
+	const text = data?.choices?.[0]?.message?.content ?? "0";
+	const score = parseInt(text, 10);
+
+	return Number.isFinite(score) ? score : 0;
+}
+
+// Поиск лучшего угла поворота
+async function detectBestRotation(
+	buffer: ArrayBuffer,
+	mimeType: string,
+	apiKey: string
+): Promise<{ rotation: number; buffer: ArrayBuffer }> {
+
+	const rotations = [0, 90, 180, 270];
+	let bestScore = -1;
+	let bestRotation = 0;
+	let bestBuffer = buffer;
+
+	for (const deg of rotations) {
+		const rotatedBuffer =
+			deg === 0 ? buffer : await rotateArrayBuffer(buffer, deg, mimeType);
+
+		const base64 = arrayBufferToBase64(rotatedBuffer);
+		const score = await scoreImageReadability(base64, apiKey);
+
+		console.log(`[ROTATION CHECK] ${deg}° → score ${score}`);
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestRotation = deg;
+			bestBuffer = rotatedBuffer;
+		}
+	}
+
+	return { rotation: bestRotation, buffer: bestBuffer };
 }
