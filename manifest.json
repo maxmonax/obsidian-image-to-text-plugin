@@ -1,9 +1,9 @@
 {
-  "id": "image-to-text-plugin",
-  "name": "Image to Text Plugin",
-  "version": "1.0.0",
-  "minAppVersion": "1.0.0",
+  "id": "business-card-ai",
+  "name": "Business Card AI",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Recognize business cards and create contacts using AI",
   "author": "Monax",
-  "description": "Automatically extracts text from images using ChatGPT and saves it to a note.",
   "main": "main.js"
 }
