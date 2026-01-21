@@ -3,7 +3,7 @@
   "name": "Business Card AI",
   "version": "0.1.0-alpha",
   "minAppVersion": "1.5.0",
-  "description": "Recognize business cards and create contacts using AI",
+  "description": "Recognize business cards and create contacts using AI.",
   "author": "Cybernex",
-  "main": "main.js"
+  "isDesktopOnly": false
 }
