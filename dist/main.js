@@ -16,11 +16,11 @@ class ImageToTextPlugin extends obsidian.Plugin {
         console.debug("✅ ImageToTextPlugin loaded");
         await this.loadSettings();
         this.addSettingTab(new ImageToTextSettingTab(this.app, this));
-        // Отслеживаем добавление новых файлов в хранилище
+        // We monitor the addition of new files to the repository
         this.registerEvent(this.app.vault.on("create", async (file) => {
             if (file.extension.match(/(png|jpg|jpeg|webp)/i)) {
                 new obsidian.Notice(`🖼 Processing ${file.name}...`);
-                // Ждём немного, чтобы Obsidian успел создать заметку
+                // We'll wait a bit for Obsidian to create a note
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 await this.processImage(file);
             }
@@ -91,7 +91,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
         console.debug(`❌ No note found with embed: ${embed}`);
         return null;
     }
-    // Добавляем метод для определения MIME-типа
+    // Adding a method to determine the MIME type
     getMimeType(file) {
         const ext = file.extension.toLowerCase();
         switch (ext) {
@@ -117,16 +117,16 @@ class ImageToTextPlugin extends obsidian.Plugin {
             const { rotation, buffer } = await detectBestRotation(originalBuffer, mimeType, this.settings.openaiApiKey);
             new obsidian.Notice(`🧭 Image rotation detected: ${rotation}°`);
             const base64 = arrayBufferToBase64(buffer);
-            // Создаём data URL
+            // create data URL
             const dataUrl = `data:${mimeType};base64,${base64}`;
-            // Вставляем как base64 в markdown
+            // Paste as base64 into Markdown
             const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
                 new obsidian.Notice("Please set your openai api key in the plugin settings.");
                 return;
             }
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
-            // Отправляем изображение в OpenAI
+            // Send image to OpenAI
             const payload = {
                 model: "gpt-4o-mini",
                 messages: [
@@ -158,19 +158,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
                     }
                 ]
             };
-            // const response = await fetch("https://api.openai.com/v1/chat/completions", {
-            // 	method: "POST",
-            // 	headers: {
-            // 		"Content-Type": "application/json",
-            // 		"Authorization": `Bearer ${this.settings.openaiApiKey}`
-            // 	},
-            // 	body: JSON.stringify(payload)
-            // });
-            // if (!response.ok) {
-            // 	const errorText = await response.text();
-            // 	throw new Error(`Openai api error: ${response.status} ${errorText}`);
-            // }
-            // const data = await response.json();
             // use requestUrl from obsidian API instead of fetch
             const response = await obsidian.requestUrl({
                 url: "https://api.openai.com/v1/chat/completions",
@@ -192,13 +179,13 @@ class ImageToTextPlugin extends obsidian.Plugin {
             const safeName = this.sanitizeFileName(name);
             const imgName = safeName + "." + file.extension;
             new obsidian.Notice(`✅ Recognized: ${name}`);
-            // Ищем существующую заметку с этим изображением
+            // Search for an existing note with this image
             // const existingNote = await this.findNoteWithImage(file);
-            // переименовываем картинку
+            // rename image file
             await this.app.vault.rename(file, imgName);
             let notePath;
             let noteContent;
-            // Формируем содержимое заметки
+            // form the content of the note
             noteContent =
                 `**Компания:** ${parsed.company || "-"}\n` +
                     `**Должность:** ${parsed.position || "-"}\n` +
@@ -209,13 +196,13 @@ class ImageToTextPlugin extends obsidian.Plugin {
                     `---\n\n` +
                     `**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
                     imageEmbed;
-            // Создаём новую заметку рядом с изображением
+            // create a new image in the note
             const folder = file.parent?.path ?? "";
             notePath = `${folder}/${safeName}.md`;
-            // Проверяем, существует ли уже файл с таким именем
+            // check if file exists
             const existingFile = this.app.vault.getAbstractFileByPath(notePath);
             if (existingFile instanceof obsidian.TFile) {
-                // Если файл существует, добавляем к имени номер
+                // if file exists, add a counter
                 let counter = 1;
                 let newPath = notePath;
                 while (this.app.vault.getAbstractFileByPath(newPath)) {
@@ -226,8 +213,9 @@ class ImageToTextPlugin extends obsidian.Plugin {
             }
             await this.app.vault.create(notePath, noteContent);
             new obsidian.Notice(`📄 Created new note: ${safeName}`);
-            // удаляем картинку
-            await this.app.vault.delete(file);
+            // delete image
+            // await this.app.vault.delete(file);
+            await this.app.fileManager.trashFile(file);
         }
         catch (err) {
             console.error("Error processing image:", err);
@@ -364,7 +352,7 @@ async function scoreImageReadability(base64, apiKey) {
     const score = parseInt(text, 10);
     return Number.isFinite(score) ? score : 0;
 }
-// Поиск лучшего угла поворота
+// searching of a best rotation angle
 async function detectBestRotation(buffer, mimeType, apiKey) {
     const rotations = [0, 90, 180, 270];
     let bestScore = -1;

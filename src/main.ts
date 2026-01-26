@@ -24,13 +24,13 @@ export default class ImageToTextPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new ImageToTextSettingTab(this.app, this));
 
-		// Отслеживаем добавление новых файлов в хранилище
+		// We monitor the addition of new files to the repository
 		this.registerEvent(
 			this.app.vault.on("create", async (file: TFile) => {
 				if (file.extension.match(/(png|jpg|jpeg|webp)/i)) {
 					new Notice(`🖼 Processing ${file.name}...`);
 
-					// Ждём немного, чтобы Obsidian успел создать заметку
+					// We'll wait a bit for Obsidian to create a note
 					await new Promise(resolve => setTimeout(resolve, 1000));
 
 					await this.processImage(file);
@@ -117,7 +117,7 @@ export default class ImageToTextPlugin extends Plugin {
 		return null;
 	}
 
-	// Добавляем метод для определения MIME-типа
+	// Adding a method to determine the MIME type
 	getMimeType(file: TFile): string {
 		const ext = file.extension.toLowerCase();
 		switch (ext) {
@@ -152,10 +152,10 @@ export default class ImageToTextPlugin extends Plugin {
 
 			const base64 = arrayBufferToBase64(buffer);
 
-			// Создаём data URL
+			// create data URL
 			const dataUrl = `data:${mimeType};base64,${base64}`;
 
-			// Вставляем как base64 в markdown
+			// Paste as base64 into Markdown
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
@@ -165,7 +165,7 @@ export default class ImageToTextPlugin extends Plugin {
 
 			new Notice(`📤 Sending ${file.name} to OpenAI...`);
 
-			// Отправляем изображение в OpenAI
+			// Send image to OpenAI
 			const payload = {
 				model: "gpt-4o-mini",
 				messages: [
@@ -199,22 +199,6 @@ export default class ImageToTextPlugin extends Plugin {
 				]
 			};
 
-			// const response = await fetch("https://api.openai.com/v1/chat/completions", {
-			// 	method: "POST",
-			// 	headers: {
-			// 		"Content-Type": "application/json",
-			// 		"Authorization": `Bearer ${this.settings.openaiApiKey}`
-			// 	},
-			// 	body: JSON.stringify(payload)
-			// });
-
-			// if (!response.ok) {
-			// 	const errorText = await response.text();
-			// 	throw new Error(`Openai api error: ${response.status} ${errorText}`);
-			// }
-
-			// const data = await response.json();
-
 			// use requestUrl from obsidian API instead of fetch
 			const response = await requestUrl({
 				url: "https://api.openai.com/v1/chat/completions",
@@ -242,16 +226,16 @@ export default class ImageToTextPlugin extends Plugin {
 
 			new Notice(`✅ Recognized: ${name}`);
 
-			// Ищем существующую заметку с этим изображением
+			// Search for an existing note with this image
 			// const existingNote = await this.findNoteWithImage(file);
 
-			// переименовываем картинку
+			// rename image file
 			await this.app.vault.rename(file, imgName);
 
 			let notePath: string;
 			let noteContent: string;
 
-			// Формируем содержимое заметки
+			// form the content of the note
 			noteContent =
 				`**Компания:** ${parsed.company || "-"}\n` +
 				`**Должность:** ${parsed.position || "-"}\n` +
@@ -263,14 +247,14 @@ export default class ImageToTextPlugin extends Plugin {
 				`**Полный текст визитки:**\n${parsed.rawText || ""}\n` +
 				imageEmbed;
 
-			// Создаём новую заметку рядом с изображением
+			// create a new image in the note
 			const folder = file.parent?.path ?? "";
 			notePath = `${folder}/${safeName}.md`;
 
-			// Проверяем, существует ли уже файл с таким именем
+			// check if file exists
 			const existingFile = this.app.vault.getAbstractFileByPath(notePath);
 			if (existingFile instanceof TFile) {
-				// Если файл существует, добавляем к имени номер
+				// if file exists, add a counter
 				let counter = 1;
 				let newPath = notePath;
 				while (this.app.vault.getAbstractFileByPath(newPath)) {
@@ -283,8 +267,9 @@ export default class ImageToTextPlugin extends Plugin {
 			await this.app.vault.create(notePath, noteContent);
 			new Notice(`📄 Created new note: ${safeName}`);
 
-			// удаляем картинку
-			await this.app.vault.delete(file);
+			// delete image
+			// await this.app.vault.delete(file);
+			await this.app.fileManager.trashFile(file);
 
 		} catch (err) {
 			console.error("Error processing image:", err);
@@ -458,7 +443,7 @@ async function scoreImageReadability(
 	return Number.isFinite(score) ? score : 0;
 }
 
-// Поиск лучшего угла поворота
+// searching of a best rotation angle
 async function detectBestRotation(
 	buffer: ArrayBuffer,
 	mimeType: string,
