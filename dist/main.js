@@ -158,7 +158,22 @@ class ImageToTextPlugin extends obsidian.Plugin {
                     }
                 ]
             };
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            // const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            // 	method: "POST",
+            // 	headers: {
+            // 		"Content-Type": "application/json",
+            // 		"Authorization": `Bearer ${this.settings.openaiApiKey}`
+            // 	},
+            // 	body: JSON.stringify(payload)
+            // });
+            // if (!response.ok) {
+            // 	const errorText = await response.text();
+            // 	throw new Error(`Openai api error: ${response.status} ${errorText}`);
+            // }
+            // const data = await response.json();
+            // use requestUrl from obsidian API instead of fetch
+            const response = await obsidian.requestUrl({
+                url: "https://api.openai.com/v1/chat/completions",
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -166,11 +181,11 @@ class ImageToTextPlugin extends obsidian.Plugin {
                 },
                 body: JSON.stringify(payload)
             });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Openai api error: ${response.status} ${errorText}`);
+            if (response.status !== 200) {
+                throw new Error(`OpenAI API error: ${response.status} ${response.text}`);
             }
-            const data = await response.json();
+            const data = response.json;
+            //
             const content = data?.choices?.[0]?.message?.content ?? "{}";
             const parsed = this.tryParseJson(content);
             const name = parsed.name?.trim() || file.basename || "Unknown Contact";
@@ -229,7 +244,10 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        containerEl.createEl("h2", { text: "Image to text plugin settings" });
+        // containerEl.createEl("h2", { text: "Image to text plugin settings" });
+        new obsidian.Setting(containerEl)
+            .setName("Image to text plugin settings")
+            .setHeading();
         new obsidian.Setting(containerEl)
             .setName("Openai api key")
             .setDesc("Enter your openai api key (starts with sk-...)")
@@ -242,7 +260,7 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
         }));
         new obsidian.Setting(containerEl)
             .setName("Model")
-            .setDesc("Модель с поддержкой изображений (например, gpt-4o-mini или gpt-4o).")
+            .setDesc("A model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
             .addText((text) => text
             .setPlaceholder("Gpt-4o-mini")
             .setValue(this.plugin.settings.model)
@@ -269,6 +287,9 @@ async function rotateArrayBuffer(buffer, degrees, mimeType) {
     const img = await createImageBitmap(blob);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
+    if (!ctx) {
+        throw new Error("Failed to get 2D canvas context.");
+    }
     if (degrees === 90 || degrees === 270) {
         canvas.width = img.height;
         canvas.height = img.width;
@@ -280,9 +301,13 @@ async function rotateArrayBuffer(buffer, degrees, mimeType) {
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((degrees * Math.PI) / 180);
     ctx.drawImage(img, -img.width / 2, -img.height / 2);
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         canvas.toBlob((b) => {
-            b.arrayBuffer().then(resolve);
+            if (!b) {
+                reject(new Error("Failed to create blob from canvas."));
+                return;
+            }
+            b.arrayBuffer().then(resolve).catch(reject);
         }, mimeType, 0.95);
     });
 }
@@ -311,7 +336,18 @@ async function scoreImageReadability(base64, apiKey) {
             }
         ]
     };
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // 	method: "POST",
+    // 	headers: {
+    // 		"Content-Type": "application/json",
+    // 		"Authorization": `Bearer ${apiKey}`
+    // 	},
+    // 	body: JSON.stringify(payload)
+    // });
+    // const data = await response.json();
+    // use requestUrl from obsidian API instead of fetch
+    const response = await obsidian.requestUrl({
+        url: "https://api.openai.com/v1/chat/completions",
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -319,7 +355,11 @@ async function scoreImageReadability(base64, apiKey) {
         },
         body: JSON.stringify(payload)
     });
-    const data = await response.json();
+    if (response.status !== 200) {
+        throw new Error(`OpenAI API error: ${response.status} ${response.text}`);
+    }
+    const data = response.json;
+    ///
     const text = data?.choices?.[0]?.message?.content ?? "0";
     const score = parseInt(text, 10);
     return Number.isFinite(score) ? score : 0;
