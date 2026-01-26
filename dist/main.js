@@ -122,7 +122,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // Вставляем как base64 в markdown
             const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
-                new obsidian.Notice("⚠️ Please set your OpenAI API key in the plugin settings.");
+                new obsidian.Notice("Please set your openai api key in the plugin settings.");
                 return;
             }
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
@@ -168,7 +168,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             });
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+                throw new Error(`Openai api error: ${response.status} ${errorText}`);
             }
             const data = await response.json();
             const content = data?.choices?.[0]?.message?.content ?? "{}";
@@ -229,12 +229,12 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        containerEl.createEl("h2", { text: "🧠 Image to Text Plugin Settings" });
+        containerEl.createEl("h2", { text: "Image to text plugin settings" });
         new obsidian.Setting(containerEl)
-            .setName("OpenAI API Key")
-            .setDesc("Введи свой OpenAI API ключ (начинается с sk-...)")
+            .setName("Openai api key")
+            .setDesc("Enter your openai api key (starts with sk-...)")
             .addText((text) => text
-            .setPlaceholder("sk-...")
+            .setPlaceholder("Sk-...")
             .setValue(this.plugin.settings.openaiApiKey)
             .onChange(async (value) => {
             this.plugin.settings.openaiApiKey = value.trim();
@@ -244,7 +244,7 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
             .setName("Model")
             .setDesc("Модель с поддержкой изображений (например, gpt-4o-mini или gpt-4o).")
             .addText((text) => text
-            .setPlaceholder("gpt-4o-mini")
+            .setPlaceholder("Gpt-4o-mini")
             .setValue(this.plugin.settings.model)
             .onChange(async (value) => {
             this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;

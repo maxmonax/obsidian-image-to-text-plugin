@@ -158,7 +158,7 @@ export default class ImageToTextPlugin extends Plugin {
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
-				new Notice("⚠️ Please set your OpenAI API key in the plugin settings.");
+				new Notice("Please set your openai api key in the plugin settings.");
 				return;
 			}
 
@@ -209,7 +209,7 @@ export default class ImageToTextPlugin extends Plugin {
 
 			if (!response.ok) {
 				const errorText = await response.text();
-				throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+				throw new Error(`Openai api error: ${response.status} ${errorText}`);
 			}
 
 			const data = await response.json();
@@ -288,14 +288,14 @@ class ImageToTextSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "🧠 Image to Text Plugin Settings" });
+		containerEl.createEl("h2", { text: "Image to text plugin settings" });
 
 		new Setting(containerEl)
-			.setName("OpenAI API Key")
-			.setDesc("Введи свой OpenAI API ключ (начинается с sk-...)")
+			.setName("Openai api key")
+			.setDesc("Enter your openai api key (starts with sk-...)")
 			.addText((text) =>
 				text
-					.setPlaceholder("sk-...")
+					.setPlaceholder("Sk-...")
 					.setValue(this.plugin.settings.openaiApiKey)
 					.onChange(async (value) => {
 						this.plugin.settings.openaiApiKey = value.trim();
@@ -308,7 +308,7 @@ class ImageToTextSettingTab extends PluginSettingTab {
 			.setDesc("Модель с поддержкой изображений (например, gpt-4o-mini или gpt-4o).")
 			.addText((text) =>
 				text
-					.setPlaceholder("gpt-4o-mini")
+					.setPlaceholder("Gpt-4o-mini")
 					.setValue(this.plugin.settings.model)
 					.onChange(async (value) => {
 						this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;
