@@ -13,7 +13,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
         this.settings = DEFAULT_SETTINGS;
     }
     async onload() {
-        console.log("✅ ImageToTextPlugin loaded");
+        console.debug("✅ ImageToTextPlugin loaded");
         await this.loadSettings();
         this.addSettingTab(new ImageToTextSettingTab(this.app, this));
         // Отслеживаем добавление новых файлов в хранилище
@@ -27,7 +27,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
         }));
     }
     onunload() {
-        console.log("🛑 ImageToTextPlugin unloaded");
+        console.debug("🛑 ImageToTextPlugin unloaded");
     }
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -65,8 +65,6 @@ class ImageToTextPlugin extends obsidian.Plugin {
         }
         catch (err) {
             const e = new Error("JSON.parse failed: " + err.message);
-            e.candidate = cleaned;
-            e.original = text;
             throw e;
         }
     }
@@ -76,13 +74,13 @@ class ImageToTextPlugin extends obsidian.Plugin {
     async findNoteWithImage(imageFile) {
         const embed = `![[${imageFile.name}]]`;
         const markdownFiles = this.app.vault.getMarkdownFiles();
-        console.log(`markdownFiles:`, markdownFiles);
+        console.debug(`markdownFiles:`, markdownFiles);
         for (const mdFile of markdownFiles) {
-            console.log(`check md:`, mdFile.name);
+            console.debug(`check md:`, mdFile.name);
             try {
                 const content = await this.app.vault.read(mdFile);
                 if (content.includes(embed)) {
-                    console.log(`✅ Found note with image: ${mdFile.name}`);
+                    console.debug(`✅ Found note with image: ${mdFile.name}`);
                     return mdFile;
                 }
             }
@@ -90,7 +88,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
                 console.error(`Error reading ${mdFile.name}:`, error);
             }
         }
-        console.log(`❌ No note found with embed: ${embed}`);
+        console.debug(`❌ No note found with embed: ${embed}`);
         return null;
     }
     // Добавляем метод для определения MIME-типа
@@ -336,7 +334,7 @@ async function detectBestRotation(buffer, mimeType, apiKey) {
         const rotatedBuffer = deg === 0 ? buffer : await rotateArrayBuffer(buffer, deg, mimeType);
         const base64 = arrayBufferToBase64(rotatedBuffer);
         const score = await scoreImageReadability(base64, apiKey);
-        console.log(`[ROTATION CHECK] ${deg}° → score ${score}`);
+        console.debug(`[ROTATION CHECK] ${deg}° → score ${score}`);
         if (score > bestScore) {
             bestScore = score;
             bestRotation = deg;

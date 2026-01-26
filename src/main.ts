@@ -18,7 +18,7 @@ export default class ImageToTextPlugin extends Plugin {
 	settings: ImageToTextSettings = DEFAULT_SETTINGS;
 
 	async onload() {
-		console.log("✅ ImageToTextPlugin loaded");
+		console.debug("✅ ImageToTextPlugin loaded");
 
 		await this.loadSettings();
 		this.addSettingTab(new ImageToTextSettingTab(this.app, this));
@@ -39,7 +39,7 @@ export default class ImageToTextPlugin extends Plugin {
 	}
 
 	onunload() {
-		console.log("🛑 ImageToTextPlugin unloaded");
+		console.debug("🛑 ImageToTextPlugin unloaded");
 	}
 
 	async loadSettings() {
@@ -72,7 +72,7 @@ export default class ImageToTextPlugin extends Plugin {
 		return text.trim() || null;
 	}
 
-	tryParseJson(text: string): any {
+	tryParseJson(text: string) {
 		const candidate = this.extractJsonFromText(text);
 		if (!candidate) throw new Error("No JSON found in response text");
 
@@ -84,9 +84,7 @@ export default class ImageToTextPlugin extends Plugin {
 		try {
 			return JSON.parse(cleaned);
 		} catch (err) {
-			const e: any = new Error("JSON.parse failed: " + (err as Error).message);
-			e.candidate = cleaned;
-			e.original = text;
+			const e = new Error("JSON.parse failed: " + (err as Error).message);
 			throw e;
 		}
 	}
@@ -99,14 +97,14 @@ export default class ImageToTextPlugin extends Plugin {
 		const embed = `![[${imageFile.name}]]`;
 		const markdownFiles = this.app.vault.getMarkdownFiles();
 
-		console.log(`markdownFiles:`, markdownFiles);
+		console.debug(`markdownFiles:`, markdownFiles);
 
 		for (const mdFile of markdownFiles) {
-			console.log(`check md:`, mdFile.name);
+			console.debug(`check md:`, mdFile.name);
 			try {
 				const content = await this.app.vault.read(mdFile);
 				if (content.includes(embed)) {
-					console.log(`✅ Found note with image: ${mdFile.name}`);
+					console.debug(`✅ Found note with image: ${mdFile.name}`);
 					return mdFile;
 				}
 			} catch (error) {
@@ -114,7 +112,7 @@ export default class ImageToTextPlugin extends Plugin {
 			}
 		}
 
-		console.log(`❌ No note found with embed: ${embed}`);
+		console.debug(`❌ No note found with embed: ${embed}`);
 		return null;
 	}
 
@@ -429,7 +427,7 @@ async function detectBestRotation(
 		const base64 = arrayBufferToBase64(rotatedBuffer);
 		const score = await scoreImageReadability(base64, apiKey);
 
-		console.log(`[ROTATION CHECK] ${deg}° → score ${score}`);
+		console.debug(`[ROTATION CHECK] ${deg}° → score ${score}`);
 
 		if (score > bestScore) {
 			bestScore = score;
