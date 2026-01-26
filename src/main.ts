@@ -305,7 +305,7 @@ class ImageToTextSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Model")
-			.setDesc("Модель с поддержкой изображений (например, gpt-4o-mini или gpt-4o).")
+			.setDesc("A model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Gpt-4o-mini")
