@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, Notice } from "obsidian";
+import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal } from "obsidian";
 import { requestUrl } from "obsidian";
 
 // =============== SETTINGS ==================
@@ -12,6 +12,55 @@ const DEFAULT_SETTINGS: ImageToTextSettings = {
 	openaiApiKey: "",
 	model: "gpt-4o-mini"
 };
+
+// ==================== MODAL =============================
+
+class ConfirmImageProcessModal extends Modal {
+	file: TFile;
+	onConfirm: () => void;
+
+	constructor(app: App, file: TFile, onConfirm: () => void) {
+		super(app);
+		this.file = file;
+		this.onConfirm = onConfirm;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		contentEl.createEl("h3", { text: "Recognize business card?" });
+
+		contentEl.createEl("p", {
+			text: `Do you want to send "${this.file.name}" to OpenAI for recognition?`
+		});
+
+		const btnRow = contentEl.createDiv({ cls: "modal-button-row" });
+
+		const recognizeBtn = btnRow.createEl("button", {
+			text: "Recognize",
+			cls: "mod-cta"
+		});
+
+		const cancelBtn = btnRow.createEl("button", {
+			text: "Cancel"
+		});
+
+		recognizeBtn.onclick = () => {
+			this.close();
+			this.onConfirm();
+		};
+
+		cancelBtn.onclick = () => {
+			this.close();
+		};
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
 
 // =============== MAIN PLUGIN CLASS ==================
 
@@ -33,7 +82,11 @@ export default class ImageToTextPlugin extends Plugin {
 					// We'll wait a bit for Obsidian to create a note
 					await new Promise(resolve => setTimeout(resolve, 1000));
 
-					await this.processImage(file);
+					// await this.processImage(file);
+					new ConfirmImageProcessModal(this.app, file, async () => {
+						await this.processImage(file);
+					}).open();
+
 				}
 			})
 		);
