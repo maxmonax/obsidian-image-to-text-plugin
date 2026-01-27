@@ -57,8 +57,8 @@ class ImageToTextPlugin extends obsidian.Plugin {
                 // We'll wait a bit for Obsidian to create a note
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 // await this.processImage(file);
-                new ConfirmImageProcessModal(this.app, file, async () => {
-                    await this.processImage(file);
+                new ConfirmImageProcessModal(this.app, file, () => {
+                    void this.processImage(file);
                 }).open();
             }
         }));
@@ -159,7 +159,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // Paste as base64 into Markdown
             const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
-                new obsidian.Notice("Please set your openai api key in the plugin settings.");
+                new obsidian.Notice("Please set your OpenAI API key in the plugin settings.");
                 return;
             }
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
@@ -269,13 +269,12 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        // containerEl.createEl("h2", { text: "Image to text plugin settings" });
         new obsidian.Setting(containerEl)
-            .setName("Image to text plugin settings")
+            .setName("Image to text plugin")
             .setHeading();
         new obsidian.Setting(containerEl)
-            .setName("Openai api key")
-            .setDesc("Enter your openai api key (starts with sk-...)")
+            .setName("OpenAI API key")
+            .setDesc("Enter your OpenAI API key (starts with sk-...)")
             .addText((text) => text
             .setPlaceholder("Sk-...")
             .setValue(this.plugin.settings.openaiApiKey)
@@ -285,9 +284,9 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
         }));
         new obsidian.Setting(containerEl)
             .setName("Model")
-            .setDesc("A model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
+            .setDesc("Model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
             .addText((text) => text
-            .setPlaceholder("Gpt-4o-mini")
+            .setPlaceholder("gpt-4o-mini")
             .setValue(this.plugin.settings.model)
             .onChange(async (value) => {
             this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;

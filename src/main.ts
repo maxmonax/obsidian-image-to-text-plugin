@@ -83,8 +83,8 @@ export default class ImageToTextPlugin extends Plugin {
 					await new Promise(resolve => setTimeout(resolve, 1000));
 
 					// await this.processImage(file);
-					new ConfirmImageProcessModal(this.app, file, async () => {
-						await this.processImage(file);
+					new ConfirmImageProcessModal(this.app, file, () => {
+						void this.processImage(file);
 					}).open();
 
 				}
@@ -212,7 +212,7 @@ export default class ImageToTextPlugin extends Plugin {
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
-				new Notice("Please set your openai api key in the plugin settings.");
+				new Notice("Please set your OpenAI API key in the plugin settings.");
 				return;
 			}
 
@@ -346,14 +346,13 @@ class ImageToTextSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// containerEl.createEl("h2", { text: "Image to text plugin settings" });
 		new Setting(containerEl)
-			.setName("Image to text plugin settings")
+			.setName("Image to text plugin")
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("Openai api key")
-			.setDesc("Enter your openai api key (starts with sk-...)")
+			.setName("OpenAI API key")
+			.setDesc("Enter your OpenAI API key (starts with sk-...)")
 			.addText((text) =>
 				text
 					.setPlaceholder("Sk-...")
@@ -366,10 +365,10 @@ class ImageToTextSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Model")
-			.setDesc("A model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
+			.setDesc("Model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
 			.addText((text) =>
 				text
-					.setPlaceholder("Gpt-4o-mini")
+					.setPlaceholder("gpt-4o-mini")
 					.setValue(this.plugin.settings.model)
 					.onChange(async (value) => {
 						this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;
