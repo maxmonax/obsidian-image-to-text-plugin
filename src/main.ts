@@ -212,7 +212,7 @@ export default class ImageToTextPlugin extends Plugin {
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
-				new Notice("Please set your OpenAI API key in the plugin settings");
+				new Notice("Please set your OpenAI API key");
 				return;
 			}
 
@@ -351,8 +351,8 @@ class ImageToTextSettingTab extends PluginSettingTab {
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("Openai api-key")
-			.setDesc("Enter your openai spi key (starts with sk-...)")
+			.setName("OpenAI api-key")
+			// .setDesc("Enter your openai api key")
 			.addText((text) =>
 				text
 					.setPlaceholder("Sk-...")
@@ -365,7 +365,7 @@ class ImageToTextSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Model")
-			.setDesc("E.g. gpt-4o-mini or gpt-4o")
+			.setDesc("Gpt-4o-mini or gpt-4o")
 			.addText((text) =>
 				text
 					.setPlaceholder("Gpt-4o-mini")
