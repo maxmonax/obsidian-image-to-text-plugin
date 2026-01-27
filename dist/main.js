@@ -159,7 +159,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // Paste as base64 into Markdown
             const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
-                new obsidian.Notice("Please set your OpenAI API key in the plugin settings.");
+                new obsidian.Notice("Please set your OpenAI API key in the plugin settings");
                 return;
             }
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
@@ -273,8 +273,8 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
             .setName("Image to text plugin")
             .setHeading();
         new obsidian.Setting(containerEl)
-            .setName("OpenAI API key")
-            .setDesc("Enter your OpenAI API key (starts with sk-...)")
+            .setName("Openai api-key")
+            .setDesc("Enter your openai spi key (starts with sk-...)")
             .addText((text) => text
             .setPlaceholder("Sk-...")
             .setValue(this.plugin.settings.openaiApiKey)
@@ -284,9 +284,9 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
         }));
         new obsidian.Setting(containerEl)
             .setName("Model")
-            .setDesc("Model that supports images (e.g. gpt-4o-mini or gpt-4o). Default is gpt-4o-mini.")
+            .setDesc("E.g. gpt-4o-mini or gpt-4o")
             .addText((text) => text
-            .setPlaceholder("gpt-4o-mini")
+            .setPlaceholder("Gpt-4o-mini")
             .setValue(this.plugin.settings.model)
             .onChange(async (value) => {
             this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;
