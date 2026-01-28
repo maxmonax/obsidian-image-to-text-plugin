@@ -212,7 +212,7 @@ export default class ImageToTextPlugin extends Plugin {
 			const imageEmbed = `![${file.basename}](${dataUrl})`;
 
 			if (!this.settings.openaiApiKey) {
-				new Notice("Please set your OpenAI API key");
+				new Notice("Please set your OpenAI API Key");
 				return;
 			}
 
@@ -351,8 +351,8 @@ class ImageToTextSettingTab extends PluginSettingTab {
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("OpenAI api-key")
-			// .setDesc("Enter your openai api key")
+			.setName("OpenAI API Key")
+			.setDesc("The token generated in your OpenAI account")
 			.addText((text) =>
 				text
 					.setPlaceholder("Sk-...")
