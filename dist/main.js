@@ -159,7 +159,7 @@ class ImageToTextPlugin extends obsidian.Plugin {
             // Paste as base64 into Markdown
             const imageEmbed = `![${file.basename}](${dataUrl})`;
             if (!this.settings.openaiApiKey) {
-                new obsidian.Notice("Set your api key in the plugin settings");
+                new obsidian.Notice("You need to specify the API key in the plugin settings");
                 return;
             }
             new obsidian.Notice(`📤 Sending ${file.name} to OpenAI...`);
@@ -273,7 +273,7 @@ class ImageToTextSettingTab extends obsidian.PluginSettingTab {
             .setName("Image to text plugin")
             .setHeading();
         new obsidian.Setting(containerEl)
-            .setName("OpenAI api key")
+            .setName("Token")
             .setDesc("The token generated in your account")
             .addText((text) => text
             .setPlaceholder("Sk-...")
